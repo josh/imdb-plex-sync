@@ -1,0 +1,37 @@
+name: Sync
+
+on:
+  schedule:
+    # 15 minutes after josh/imdb-data runs
+    # https://github.com/josh/imdb-data/blob/61b99a9/.github/workflows/sync.yml#L5C5-L5C32
+    - cron: "30 0,5,19,23 * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    concurrency: sync
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        run: pipx install uv
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system --requirement requirements.txt
+
+      - name: Sync
+        run: |
+          python imdb_plex_sync.py
+        env:
+          IMDB_WATCHLIST_URL: ${{ secrets.IMDB_WATCHLIST_URL }}
+          PLEX_USERNAME: ${{ secrets.PLEX_USERNAME }}
+          PLEX_PASSWORD: ${{ secrets.PLEX_PASSWORD }}
+          PLEX_TOKEN: ${{ secrets.PLEX_TOKEN }}
