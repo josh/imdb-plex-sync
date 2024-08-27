@@ -4,24 +4,26 @@ certifi==2024.7.4
     # via requests
 charset-normalizer==3.3.2
     # via requests
+click==8.1.7
+    # via imdb-plex-sync (pyproject.toml)
 idna==3.8
     # via requests
 lru-cache @ https://github.com/josh/py-lru-cache/releases/download/v1.0.0/lru_cache-1.0.0-py3-none-any.whl
-    # via trakt-plex-sync (pyproject.toml)
+    # via imdb-plex-sync (pyproject.toml)
 mypy==1.11.2
-    # via trakt-plex-sync (pyproject.toml)
+    # via imdb-plex-sync (pyproject.toml)
 mypy-extensions==1.0.0
     # via mypy
 plexapi==4.15.16
-    # via trakt-plex-sync (pyproject.toml)
+    # via imdb-plex-sync (pyproject.toml)
 requests==2.32.3
     # via
-    #   trakt-plex-sync (pyproject.toml)
+    #   imdb-plex-sync (pyproject.toml)
     #   plexapi
 ruff==0.6.2
-    # via trakt-plex-sync (pyproject.toml)
+    # via imdb-plex-sync (pyproject.toml)
 types-requests==2.32.0.20240712
-    # via trakt-plex-sync (pyproject.toml)
+    # via imdb-plex-sync (pyproject.toml)
 typing-extensions==4.12.2
     # via mypy
 urllib3==2.2.2
