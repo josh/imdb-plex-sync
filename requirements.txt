@@ -6,7 +6,7 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via imdb-plex-sync (pyproject.toml)
-idna==3.8
+idna==3.10
     # via requests
 mypy==1.11.2
     # via imdb-plex-sync (pyproject.toml)
