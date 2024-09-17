@@ -9,11 +9,16 @@ permissions:
 jobs:
   merge:
     runs-on: ubuntu-latest
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: github.actor == 'dependabot[bot]' && github.repository == 'josh/imdb-plex-sync'
 
     steps:
+      - name: Dependabot metadata
+        id: dependabot-metadata
+        uses: dependabot/fetch-metadata@v2
+
       - name: Enable auto-merge
-        run: gh pr merge --merge --auto "$URL"
+        if: steps.dependabot-metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --merge --auto "$PR_URL"
         env:
-          URL: ${{ github.event.pull_request.html_url }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ github.token }}
