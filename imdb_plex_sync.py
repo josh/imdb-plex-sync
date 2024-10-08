@@ -1,12 +1,14 @@
 import csv
+import json
 import logging
 import re
+import urllib.parse
+import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import click
-import requests
 from plexapi.myplex import MyPlexAccount  # type: ignore
 from plexapi.video import Video  # type: ignore
 
@@ -79,9 +81,9 @@ def _fetch_imdb_watchlist(url: str) -> list[str]:
 def _iterlines(path: Path | str) -> Iterator[str]:
     if isinstance(path, str) and path.startswith("http"):
         logger.debug("Fetching remote '%s'", path)
-        response = requests.get(path)
-        response.raise_for_status()
-        yield from response.iter_lines(decode_unicode=True)
+        with urllib.request.urlopen(path, timeout=10) as response:
+            for line in response:
+                yield line.decode("utf-8")
     else:
         logger.debug("Reading local file '%s'", path)
         with open(path) as f:
@@ -89,18 +91,19 @@ def _iterlines(path: Path | str) -> Iterator[str]:
 
 
 def _sparql(query: str) -> Any:
-    r = requests.post(
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "IMDbPlexBot/0.0 (https://github.com/josh/imdb-plex-sync)",
+    }
+    data = urllib.parse.urlencode({"query": query}).encode("utf-8")
+    req = urllib.request.Request(
         "https://query.wikidata.org/sparql",
-        data={"query": query},
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "IMDbPlexBot/0.0 (https://github.com/josh/imdb-plex-sync)",
-        },
-        timeout=(1, 90),
+        data=data,
+        headers=headers,
+        method="POST",
     )
-    r.raise_for_status()
-    data = r.json()
-    return data
+    with urllib.request.urlopen(req, timeout=90) as response:
+        return json.load(response)
 
 
 _SPARQL_QUERY = """

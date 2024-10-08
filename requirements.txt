@@ -15,16 +15,10 @@ mypy-extensions==1.0.0
 plexapi==4.15.16
     # via imdb-plex-sync (pyproject.toml)
 requests==2.32.3
-    # via
-    #   imdb-plex-sync (pyproject.toml)
-    #   plexapi
+    # via plexapi
 ruff==0.6.8
-    # via imdb-plex-sync (pyproject.toml)
-types-requests==2.32.0.20240712
     # via imdb-plex-sync (pyproject.toml)
 typing-extensions==4.12.2
     # via mypy
 urllib3==2.2.3
-    # via
-    #   requests
-    #   types-requests
+    # via requests
