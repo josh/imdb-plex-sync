@@ -20,5 +20,5 @@ ruff==0.8.0
     # via imdb-plex-sync (pyproject.toml)
 typing-extensions==4.12.2
     # via mypy
-urllib3==2.2.3
+urllib3==2.3.0
     # via requests
