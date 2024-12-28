@@ -1,5 +1,10 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "imdb-plex-sync"
+version = "0.0.0"
 readme = "README.md"
 authors = [{ name = "Joshua Peek" }]
 requires-python = ">=3.12"
@@ -10,6 +15,12 @@ dependencies = [
     "click>=8.0.0,<9.0",    
     "plexapi>=4.0.0,<5.0",
 ]
+
+[tool.hatch.build.targets.wheel.force-include]
+"imdb_plex_sync.py" = "imdb_plex_sync/__init__.py"
+
+[project.scripts]
+imdb-plex-sync = "imdb_plex_sync:main"
 
 [project.optional-dependencies]
 dev = [

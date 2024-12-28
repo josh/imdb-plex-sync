@@ -24,11 +24,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system --requirement requirements.txt
+          uv pip install --system --constraint requirements.txt '.'
 
       - name: Sync
         run: |
-          python imdb_plex_sync.py
+          imdb-plex-sync
         env:
           IMDB_WATCHLIST_URL: ${{ secrets.IMDB_WATCHLIST_URL }}
           PLEX_USERNAME: ${{ secrets.PLEX_USERNAME }}
