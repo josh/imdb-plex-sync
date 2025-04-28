@@ -10,7 +10,7 @@ idna==3.10
     # via requests
 mypy==1.15.0
     # via imdb-plex-sync (pyproject.toml)
-mypy-extensions==1.0.0
+mypy-extensions==1.1.0
     # via mypy
 plexapi==4.17.0
     # via imdb-plex-sync (pyproject.toml)
