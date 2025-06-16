@@ -8,7 +8,7 @@ click==8.2.1
     # via imdb-plex-sync (pyproject.toml)
 idna==3.10
     # via requests
-mypy==1.16.0
+mypy==1.16.1
     # via imdb-plex-sync (pyproject.toml)
 mypy-extensions==1.1.0
     # via mypy
