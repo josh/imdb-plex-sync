@@ -15,20 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: "pyproject.toml"
-
       - uses: astral-sh/setup-uv@v6
 
       - name: Install dependencies
-        run: |
-          uv pip install --system --constraint requirements.txt '.'
+        run: uv sync
 
       - name: Sync
         run: |
-          imdb-plex-sync
+          uv run imdb-plex-sync
         env:
           IMDB_WATCHLIST_URL: ${{ secrets.IMDB_WATCHLIST_URL }}
           PLEX_USERNAME: ${{ secrets.PLEX_USERNAME }}

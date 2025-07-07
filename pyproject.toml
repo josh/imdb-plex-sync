@@ -22,7 +22,7 @@ dependencies = [
 [project.scripts]
 imdb-plex-sync = "imdb_plex_sync:main"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "mypy>=1.0.0,<2.0",
     "ruff>=0.6.0",
