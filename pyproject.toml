@@ -12,13 +12,11 @@ license-files = [ "LICENSE" ]
 authors = [ { name = "Joshua Peek" } ]
 requires-python = ">=3.12"
 classifiers = [
-  "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
-dependencies = [
-  "click>=8,<9",
-]
+dependencies = [ "click>=8,<9" ]
 
 scripts.imdb-plex-sync = "imdb_plex_sync:main"
 
@@ -30,6 +28,9 @@ dev = [ "mypy>=1,<2", "ruff>=0.6" ]
 
 [tool.ruff]
 lint.extend-select = [ "I", "UP" ]
+
+[tool.pyproject-fmt]
+indent = 4
 
 [tool.mypy]
 strict = true
