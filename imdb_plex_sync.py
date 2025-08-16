@@ -23,12 +23,10 @@ logger = logging.getLogger("imdb-trakt-sync")
 )
 @click.option(
     "--plex-username",
-    required=True,
     envvar="PLEX_USERNAME",
 )
 @click.option(
     "--plex-password",
-    required=True,
     envvar="PLEX_PASSWORD",
 )
 @click.option(
@@ -44,8 +42,8 @@ logger = logging.getLogger("imdb-trakt-sync")
 )
 def main(
     imdb_watchlist_url: str,
-    plex_username: str,
-    plex_password: str,
+    plex_username: str | None,
+    plex_password: str | None,
     plex_token: str | None,
     verbose: bool,
 ) -> None:
