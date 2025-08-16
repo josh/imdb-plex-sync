@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import click
-from plexapi.myplex import MyPlexAccount  # type: ignore
-from plexapi.video import Video  # type: ignore
 
 logger = logging.getLogger("imdb-trakt-sync")
 
@@ -80,10 +78,50 @@ def _imdb_to_plex_ids(imdb_ids: list[str]) -> list[str]:
     return plex_ids
 
 
-def _find_by_plex_guid(account: MyPlexAccount, ratingkey: str) -> Video:
-    return account.fetchItem(
-        f"https://metadata.provider.plex.tv/library/metadata/{ratingkey}"
+def _plex_watchlist(token: str) -> list[str]:
+    keys: list[str] = []
+    url = "https://discover.provider.plex.tv/library/sections/watchlist/all"
+    headers = {
+        "Accept": "application/json",
+        "X-Plex-Provider-Version": "7.2.0",
+        "X-Plex-Container-Size": "300",
+        "X-Plex-Token": token,
+    }
+    req = urllib.request.Request(url=url, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as response:
+        data = json.load(response)
+        for metadata in data["MediaContainer"]["Metadata"]:
+            if "ratingKey" in metadata:
+                keys.append(metadata["ratingKey"])
+    return keys
+
+
+def _plex_watchlist_add(token: str, key: str) -> None:
+    url = f"https://discover.provider.plex.tv/actions/addToWatchlist?ratingKey={key}"
+    headers = {
+        "Accept": "application/json",
+        "X-Plex-Provider-Version": "7.2.0",
+        "X-Plex-Token": token,
+    }
+    req = urllib.request.Request(url=url, headers=headers, method="PUT")
+    with urllib.request.urlopen(req, timeout=30) as response:
+        data = json.load(response)
+        assert data
+
+
+def _plex_watchlist_remove(token: str, key: str) -> None:
+    url = (
+        f"https://discover.provider.plex.tv/actions/removeFromWatchlist?ratingKey={key}"
     )
+    headers = {
+        "Accept": "application/json",
+        "X-Plex-Provider-Version": "7.2.0",
+        "X-Plex-Token": token,
+    }
+    req = urllib.request.Request(url=url, headers=headers, method="PUT")
+    with urllib.request.urlopen(req, timeout=30) as response:
+        data = json.load(response)
+        assert data
 
 
 @click.command()
@@ -91,14 +129,6 @@ def _find_by_plex_guid(account: MyPlexAccount, ratingkey: str) -> Video:
     "--imdb-watchlist-url",
     required=True,
     envvar="IMDB_WATCHLIST_URL",
-)
-@click.option(
-    "--plex-username",
-    envvar="PLEX_USERNAME",
-)
-@click.option(
-    "--plex-password",
-    envvar="PLEX_PASSWORD",
 )
 @click.option(
     "--plex-token",
@@ -113,34 +143,22 @@ def _find_by_plex_guid(account: MyPlexAccount, ratingkey: str) -> Video:
 )
 def main(
     imdb_watchlist_url: str,
-    plex_username: str | None,
-    plex_password: str | None,
-    plex_token: str | None,
+    plex_token: str,
     verbose: bool,
 ) -> None:
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
     imdb_ids = _fetch_imdb_watchlist(imdb_watchlist_url)
     imdb_keys = set(_imdb_to_plex_ids(imdb_ids))
-
-    account = MyPlexAccount(
-        username=plex_username,
-        password=plex_password,
-        token=plex_token,
-    )
-    plex_keys: set[str] = set(
-        item.key.replace("/library/metadata/", "") for item in account.watchlist()
-    )
+    plex_keys = set(_plex_watchlist(token=plex_token))
 
     for key in imdb_keys - plex_keys:
-        video = _find_by_plex_guid(account, key)
-        logger.info("+ %s", video.title)
-        video.addToWatchlist()
+        logger.info("+ %s", key)
+        _plex_watchlist_add(plex_token, key)
 
     for key in plex_keys - imdb_keys:
-        video = _find_by_plex_guid(account, key)
-        logger.info("- %s", video.title)
-        video.removeFromWatchlist()
+        logger.info("- %s", key)
+        _plex_watchlist_remove(plex_token, key)
 
 
 if __name__ == "__main__":
