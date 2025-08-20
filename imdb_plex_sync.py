@@ -1,14 +1,13 @@
 import csv
 import json
 import logging
-import re
 import urllib.parse
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import click
+import polars as pl
 
 logger = logging.getLogger("imdb-trakt-sync")
 
@@ -29,53 +28,28 @@ def _fetch_imdb_watchlist(url: str) -> list[str]:
     return [row["Const"] for row in csv.DictReader(_iterlines(url))]
 
 
-def _sparql(query: str) -> Any:
-    headers = {
-        "Accept": "application/json",
-        "User-Agent": "IMDbPlexBot/0.0 (https://github.com/josh/imdb-plex-sync)",
-    }
-    data = urllib.parse.urlencode({"query": query}).encode("utf-8")
-    req = urllib.request.Request(
-        "https://query.wikidata.org/sparql",
-        data=data,
-        headers=headers,
-        method="POST",
+def _imdb_to_plex_rating_keys(imdb_ids: list[str]) -> list[str]:
+    df1 = pl.LazyFrame({"imdb_id": imdb_ids}).select(
+        imdb_numeric_id=pl.col("imdb_id").str.replace("tt", "").cast(pl.Int64)
     )
-    with urllib.request.urlopen(req, timeout=90) as response:
-        return json.load(response)
+    df2 = pl.scan_parquet("https://josh.github.io/plex-index/plex.parquet").select(
+        rating_key=pl.col("key").bin.encode("hex"),
+        imdb_numeric_id=pl.col("imdb_numeric_id"),
+    )
+    df3 = (
+        df1.join(df2, on="imdb_numeric_id", how="left")
+        .select("rating_key")
+        .filter(pl.col("rating_key").is_not_null())
+    )
 
+    plex_rating_keys = df3.collect()["rating_key"].to_list()
 
-_SPARQL_QUERY = """
-SELECT DISTINCT ?imdb_id ?plex_id WHERE {
-  VALUES ?imdb_id { ?imdb_ids }
-  ?item wdt:P345 ?imdb_id; wdt:P11460 ?plex_id.
-}
-"""
-
-
-def _imdb_to_plex_ids(imdb_ids: list[str]) -> list[str]:
-    values_str = " ".join([f'"{v}"' for v in imdb_ids])
-    query = _SPARQL_QUERY.replace("?imdb_ids", values_str)
-    data = _sparql(query)
-
-    imdb_to_plex: dict[str, str] = {}
-    for result in data["results"]["bindings"]:
-        imdb_id = result["imdb_id"]["value"]
-        plex_id = result["plex_id"]["value"]
-        if re.match(r"^[a-f0-9]{24}$", plex_id):
-            if imdb_id in imdb_to_plex:
-                logger.warning("Duplicate IMDb ID %s", imdb_id)
-            imdb_to_plex[imdb_id] = plex_id
-
-    plex_ids = [
-        imdb_to_plex[imdb_id] for imdb_id in imdb_ids if imdb_id in imdb_to_plex
-    ]
-    if len(plex_ids) < len(imdb_ids):
-        logger.warning("Found %i/%i IMDb IDs", len(plex_ids), len(imdb_ids))
+    if len(plex_rating_keys) < len(imdb_ids):
+        logger.warning("Found %i/%i IMDb IDs", len(plex_rating_keys), len(imdb_ids))
     else:
         logger.info("Found all %i IMDB IDs", len(imdb_ids))
 
-    return plex_ids
+    return plex_rating_keys
 
 
 def _plex_watchlist(token: str) -> list[str]:
@@ -156,7 +130,7 @@ def main(
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
     imdb_ids = _fetch_imdb_watchlist(imdb_watchlist_url)
-    imdb_keys = set(_imdb_to_plex_ids(imdb_ids))
+    imdb_keys = set(_imdb_to_plex_rating_keys(imdb_ids))
     plex_keys = set(_plex_watchlist(token=plex_token))
 
     for key in imdb_keys - plex_keys:
