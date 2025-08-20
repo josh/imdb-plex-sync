@@ -42,7 +42,7 @@ requires-dist = [{ name = "click", specifier = ">=8.1.8,<9" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "mypy", specifier = ">=1,<2" },
+    { name = "mypy", specifier = ">=1.4,<2" },
     { name = "ruff", specifier = ">=0.6" },
 ]
 

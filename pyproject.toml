@@ -21,7 +21,10 @@ dependencies = [
 scripts.imdb-plex-sync = "imdb_plex_sync:main"
 
 [dependency-groups]
-dev = [ "mypy>=1,<2", "ruff>=0.6" ]
+dev = [
+    "mypy>=1.4,<2",
+    "ruff>=0.6",
+]
 
 [tool.hatch.build.targets.wheel.force-include]
 "imdb_plex_sync.py" = "imdb_plex_sync/__init__.py"
