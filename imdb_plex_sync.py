@@ -141,10 +141,17 @@ def _plex_watchlist_remove(token: str, key: str) -> None:
     help="Enable verbose logging",
     envvar="ACTIONS_RUNNER_DEBUG",
 )
+@click.option(
+    "--dry-run",
+    "-n",
+    is_flag=True,
+    help="Show what would be done without making changes",
+)
 def main(
     imdb_watchlist_url: str,
     plex_token: str,
     verbose: bool,
+    dry_run: bool,
 ) -> None:
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
@@ -153,12 +160,18 @@ def main(
     plex_keys = set(_plex_watchlist(token=plex_token))
 
     for key in imdb_keys - plex_keys:
-        logger.info("+ %s", key)
-        _plex_watchlist_add(plex_token, key)
+        if dry_run:
+            logger.info("[DRY RUN] + %s", key)
+        else:
+            logger.info("+ %s", key)
+            _plex_watchlist_add(plex_token, key)
 
     for key in plex_keys - imdb_keys:
-        logger.info("- %s", key)
-        _plex_watchlist_remove(plex_token, key)
+        if dry_run:
+            logger.info("[DRY RUN] - %s", key)
+        else:
+            logger.info("- %s", key)
+            _plex_watchlist_remove(plex_token, key)
 
 
 if __name__ == "__main__":
