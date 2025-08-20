@@ -38,7 +38,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "click", specifier = ">=8,<9" }]
+requires-dist = [{ name = "click", specifier = ">=8.1.8,<9" }]
 
 [package.metadata.requires-dev]
 dev = [

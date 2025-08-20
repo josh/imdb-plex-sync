@@ -15,7 +15,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-dependencies = [ "click>=8,<9" ]
+dependencies = [
+    "click>=8.1.8,<9",
+]
 scripts.imdb-plex-sync = "imdb_plex_sync:main"
 
 [dependency-groups]
