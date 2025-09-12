@@ -25,6 +25,4 @@ jobs:
           uv run imdb-plex-sync
         env:
           IMDB_WATCHLIST_URL: ${{ vars.IMDB_WATCHLIST_URL }}
-          PLEX_USERNAME: ${{ secrets.PLEX_USERNAME }}
-          PLEX_PASSWORD: ${{ secrets.PLEX_PASSWORD }}
           PLEX_TOKEN: ${{ secrets.PLEX_TOKEN }}
