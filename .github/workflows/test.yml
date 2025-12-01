@@ -1,0 +1,32 @@
+name: Test
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-slim
+
+    strategy:
+      matrix:
+        uv_resolution: ["highest", "lowest-direct"]
+
+    env:
+      UV_RESOLUTION: ${{ matrix.uv_resolution }}
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Sync (Dry Run)
+        run: |
+          uv run imdb-plex-sync --dry-run
+        env:
+          IMDB_WATCHLIST_URL: ${{ vars.IMDB_WATCHLIST_URL }}
+          PLEX_TOKEN: ${{ secrets.PLEX_TOKEN }}
