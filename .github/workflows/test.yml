@@ -1,0 +1,24 @@
+name: Test
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-slim
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Sync (Dry Run)
+        run: |
+          uv run imdb-plex-sync --dry-run
+        env:
+          IMDB_WATCHLIST_URL: ${{ vars.IMDB_WATCHLIST_URL }}
+          PLEX_TOKEN: ${{ secrets.PLEX_TOKEN }}
