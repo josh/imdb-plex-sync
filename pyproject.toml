@@ -17,14 +17,14 @@ classifiers = [
 ]
 dependencies = [
     "click>=8.1.8,<9",
-    "polars>=1.27.1",
+    "polars>=1.27.1,<2",
 ]
 scripts.imdb-plex-sync = "imdb_plex_sync:main"
 
 [dependency-groups]
 dev = [
     "mypy>=1.4,<2",
-    "ruff>=0.6",
+    "ruff>=0.6,<2",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
