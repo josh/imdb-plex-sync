@@ -58,7 +58,7 @@ def _plex_watchlist(token: str) -> list[str]:
     headers = {
         "Accept": "application/json",
         "X-Plex-Provider-Version": "7.2.0",
-        "X-Plex-Container-Size": "300",
+        "X-Plex-Container-Size": "250",
         "X-Plex-Token": token,
     }
     req = urllib.request.Request(url=url, headers=headers)
