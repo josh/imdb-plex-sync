@@ -54,11 +54,26 @@ def _imdb_to_plex_rating_keys(imdb_ids: list[str]) -> list[str]:
 
 def _plex_watchlist(token: str) -> list[str]:
     keys: list[str] = []
+    offset = 0
+    size = 50
+    while True:
+        page_keys = _plex_watchlist_page(token, offset=offset, size=size)
+        keys.extend(page_keys)
+        if len(page_keys) < size:
+            break
+        offset += size
+    return keys
+
+
+def _plex_watchlist_page(token: str, offset: int, size: int) -> list[str]:
+    assert size <= 100
+    keys: list[str] = []
     url = "https://discover.provider.plex.tv/library/sections/watchlist/all"
     headers = {
         "Accept": "application/json",
         "X-Plex-Provider-Version": "7.2.0",
-        "X-Plex-Container-Size": "250",
+        "X-Plex-Container-Start": str(offset),
+        "X-Plex-Container-Size": str(size),
         "X-Plex-Token": token,
     }
     req = urllib.request.Request(url=url, headers=headers)
