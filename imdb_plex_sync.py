@@ -79,7 +79,7 @@ def _plex_watchlist_page(token: str, offset: int, size: int) -> list[str]:
     req = urllib.request.Request(url=url, headers=headers)
     with urllib.request.urlopen(req, timeout=30) as response:
         data = json.load(response)
-        for metadata in data["MediaContainer"]["Metadata"]:
+        for metadata in data["MediaContainer"].get("Metadata", []):
             if "ratingKey" in metadata:
                 keys.append(metadata["ratingKey"])
     return keys
