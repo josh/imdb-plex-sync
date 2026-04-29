@@ -121,6 +121,7 @@ def _plex_watchlist_remove(token: str, key: str) -> None:
 )
 @click.option(
     "--plex-token",
+    required=True,
     envvar="PLEX_TOKEN",
 )
 @click.option(
