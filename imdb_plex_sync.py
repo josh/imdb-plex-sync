@@ -1,7 +1,6 @@
 import csv
 import json
 import logging
-import urllib.parse
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
@@ -36,13 +35,10 @@ def _imdb_to_plex_rating_keys(imdb_ids: list[str]) -> list[str]:
         rating_key=pl.col("key").bin.encode("hex"),
         imdb_numeric_id=pl.col("imdb_numeric_id"),
     )
-    df3 = (
-        df1.join(df2, on="imdb_numeric_id", how="left")
-        .select("rating_key")
-        .filter(pl.col("rating_key").is_not_null())
-    )
+    df3 = df1.join(df2, on="imdb_numeric_id", how="left").select("rating_key")
+    df4 = df3.filter(pl.col("rating_key").is_not_null())
 
-    plex_rating_keys = df3.collect()["rating_key"].to_list()
+    plex_rating_keys = df4.collect()["rating_key"].to_list()
 
     if len(plex_rating_keys) < len(imdb_ids):
         logger.warning("Found %i/%i IMDb IDs", len(plex_rating_keys), len(imdb_ids))

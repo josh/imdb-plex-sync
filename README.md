@@ -4,9 +4,9 @@ Sync IMDb watchlist to Plex watchlist
 
 ## Setup
 
-Design to run via GitHub Actions. To get started, Fork this repository.
+Designed to run via GitHub Actions. To get started, fork this repository.
 
-Then set a bunch of Repository secrets for the following:
+Then set the following repository secrets:
 
 - `IMDB_WATCHLIST_URL`: Your IMDb watchlist CSV URL
 - `PLEX_TOKEN`: Plex server token
