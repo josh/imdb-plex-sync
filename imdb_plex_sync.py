@@ -1,6 +1,9 @@
 import csv
+import http.client
 import json
 import logging
+import time
+import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
@@ -10,13 +13,35 @@ import polars as pl
 
 logger = logging.getLogger("imdb-trakt-sync")
 
+_MAX_ATTEMPTS = 4
+_RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
+def _urlopen(url: urllib.request.Request | str, timeout: float) -> bytes:
+    for attempt in range(_MAX_ATTEMPTS):
+        error: Exception
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                data: bytes = response.read()
+                return data
+        except urllib.error.HTTPError as e:
+            if e.code not in _RETRY_STATUSES or attempt == _MAX_ATTEMPTS - 1:
+                raise
+            error = e
+        except (urllib.error.URLError, TimeoutError, http.client.HTTPException) as e:
+            if attempt == _MAX_ATTEMPTS - 1:
+                raise
+            error = e
+        delay = 2**attempt
+        logger.warning("Retrying in %is after error: %s", delay, error)
+        time.sleep(delay)
+    raise AssertionError("unreachable")
+
 
 def _iterlines(path: Path | str) -> Iterator[str]:
     if isinstance(path, str) and path.startswith("http"):
         logger.debug("Fetching remote '%s'", path)
-        with urllib.request.urlopen(path, timeout=10) as response:
-            for line in response:
-                yield line.decode("utf-8")
+        yield from _urlopen(path, timeout=10).decode("utf-8").splitlines(keepends=True)
     else:
         logger.debug("Reading local file '%s'", path)
         with open(path) as f:
@@ -73,11 +98,10 @@ def _plex_watchlist_page(token: str, offset: int, size: int) -> list[str]:
         "X-Plex-Token": token,
     }
     req = urllib.request.Request(url=url, headers=headers)
-    with urllib.request.urlopen(req, timeout=30) as response:
-        data = json.load(response)
-        for metadata in data["MediaContainer"].get("Metadata", []):
-            if "ratingKey" in metadata:
-                keys.append(metadata["ratingKey"])
+    data = json.loads(_urlopen(req, timeout=30))
+    for metadata in data["MediaContainer"].get("Metadata", []):
+        if "ratingKey" in metadata:
+            keys.append(metadata["ratingKey"])
     return keys
 
 
@@ -89,9 +113,7 @@ def _plex_watchlist_add(token: str, key: str) -> None:
         "X-Plex-Token": token,
     }
     req = urllib.request.Request(url=url, headers=headers, method="PUT")
-    with urllib.request.urlopen(req, timeout=30) as response:
-        data = json.load(response)
-        assert data
+    assert json.loads(_urlopen(req, timeout=30))
 
 
 def _plex_watchlist_remove(token: str, key: str) -> None:
@@ -104,9 +126,7 @@ def _plex_watchlist_remove(token: str, key: str) -> None:
         "X-Plex-Token": token,
     }
     req = urllib.request.Request(url=url, headers=headers, method="PUT")
-    with urllib.request.urlopen(req, timeout=30) as response:
-        data = json.load(response)
-        assert data
+    assert json.loads(_urlopen(req, timeout=30))
 
 
 @click.command()
@@ -145,19 +165,32 @@ def main(
     imdb_keys = set(_imdb_to_plex_rating_keys(imdb_ids))
     plex_keys = set(_plex_watchlist(token=plex_token))
 
+    failures = 0
+
     for key in imdb_keys - plex_keys:
         if dry_run:
             logger.info("[DRY RUN] + %s", key)
         else:
             logger.info("+ %s", key)
-            _plex_watchlist_add(plex_token, key)
+            try:
+                _plex_watchlist_add(plex_token, key)
+            except Exception:
+                logger.exception("Failed to add %s", key)
+                failures += 1
 
     for key in plex_keys - imdb_keys:
         if dry_run:
             logger.info("[DRY RUN] - %s", key)
         else:
             logger.info("- %s", key)
-            _plex_watchlist_remove(plex_token, key)
+            try:
+                _plex_watchlist_remove(plex_token, key)
+            except Exception:
+                logger.exception("Failed to remove %s", key)
+                failures += 1
+
+    if failures:
+        raise SystemExit(f"{failures} watchlist changes failed")
 
 
 if __name__ == "__main__":
