@@ -78,15 +78,15 @@ def _plex_watchlist(token: str) -> list[str]:
     offset = 0
     size = 50
     while True:
-        page_keys = _plex_watchlist_page(token, offset=offset, size=size)
+        page_keys, page_size = _plex_watchlist_page(token, offset=offset, size=size)
         keys.extend(page_keys)
-        if len(page_keys) < size:
+        if page_size < size:
             break
         offset += size
     return keys
 
 
-def _plex_watchlist_page(token: str, offset: int, size: int) -> list[str]:
+def _plex_watchlist_page(token: str, offset: int, size: int) -> tuple[list[str], int]:
     assert size <= 100
     keys: list[str] = []
     url = "https://discover.provider.plex.tv/library/sections/watchlist/all"
@@ -99,10 +99,11 @@ def _plex_watchlist_page(token: str, offset: int, size: int) -> list[str]:
     }
     req = urllib.request.Request(url=url, headers=headers)
     data = json.loads(_urlopen(req, timeout=30))
-    for metadata in data["MediaContainer"].get("Metadata", []):
+    metadata_items = data["MediaContainer"].get("Metadata", [])
+    for metadata in metadata_items:
         if "ratingKey" in metadata:
             keys.append(metadata["ratingKey"])
-    return keys
+    return keys, len(metadata_items)
 
 
 def _plex_watchlist_add(token: str, key: str) -> None:
