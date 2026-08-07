@@ -11,7 +11,7 @@ from pathlib import Path
 import click
 import polars as pl
 
-logger = logging.getLogger("imdb-trakt-sync")
+logger = logging.getLogger("imdb-plex-sync")
 
 _MAX_ATTEMPTS = 4
 _RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
