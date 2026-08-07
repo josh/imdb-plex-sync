@@ -44,7 +44,7 @@ def _iterlines(path: Path | str) -> Iterator[str]:
         yield from _urlopen(path, timeout=10).decode("utf-8").splitlines(keepends=True)
     else:
         logger.debug("Reading local file '%s'", path)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             yield from f
 
 
