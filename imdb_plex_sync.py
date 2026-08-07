@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
@@ -39,7 +40,10 @@ def _urlopen(url: urllib.request.Request | str, timeout: float) -> bytes:
 
 
 def _iterlines(path: Path | str) -> Iterator[str]:
-    if isinstance(path, str) and path.startswith("http"):
+    if isinstance(path, str) and urllib.parse.urlsplit(path).scheme.lower() in {
+        "http",
+        "https",
+    }:
         logger.debug("Fetching remote '%s'", path)
         yield from _urlopen(path, timeout=10).decode("utf-8").splitlines(keepends=True)
     else:
