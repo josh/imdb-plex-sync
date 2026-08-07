@@ -28,7 +28,12 @@ def _urlopen(url: urllib.request.Request | str, timeout: float) -> bytes:
             if e.code not in _RETRY_STATUSES or attempt == _MAX_ATTEMPTS - 1:
                 raise
             error = e
-        except (urllib.error.URLError, TimeoutError, http.client.HTTPException) as e:
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            ConnectionError,
+            http.client.HTTPException,
+        ) as e:
             if attempt == _MAX_ATTEMPTS - 1:
                 raise
             error = e
