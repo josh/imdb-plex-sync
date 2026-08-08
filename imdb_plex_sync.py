@@ -62,20 +62,26 @@ def _fetch_imdb_watchlist(url: str) -> list[str]:
 
 
 def _imdb_to_plex_rating_keys(imdb_ids: list[str]) -> list[str]:
-    df1 = pl.LazyFrame({"imdb_id": imdb_ids}).select(
-        imdb_numeric_id=pl.col("imdb_id").str.replace("tt", "").cast(pl.Int64)
+    df1 = (
+        pl.LazyFrame({"imdb_id": imdb_ids})
+        .select(imdb_numeric_id=pl.col("imdb_id").str.replace("tt", "").cast(pl.Int64))
+        .with_row_index("imdb_row")
     )
     df2 = pl.scan_parquet("https://josh.github.io/plex-index/plex.parquet").select(
         rating_key=pl.col("key").bin.encode("hex"),
         imdb_numeric_id=pl.col("imdb_numeric_id"),
     )
-    df3 = df1.join(df2, on="imdb_numeric_id", how="left").select("rating_key")
+    df3 = df1.join(df2, on="imdb_numeric_id", how="left").select(
+        "imdb_row", "rating_key"
+    )
     df4 = df3.filter(pl.col("rating_key").is_not_null())
 
-    plex_rating_keys = df4.collect()["rating_key"].to_list()
+    matches = df4.collect()
+    plex_rating_keys = matches["rating_key"].to_list()
+    mapped_ids = matches["imdb_row"].n_unique()
 
-    if len(plex_rating_keys) < len(imdb_ids):
-        logger.warning("Found %i/%i IMDb IDs", len(plex_rating_keys), len(imdb_ids))
+    if mapped_ids < len(imdb_ids):
+        logger.warning("Found %i/%i IMDb IDs", mapped_ids, len(imdb_ids))
     else:
         logger.info("Found all %i IMDB IDs", len(imdb_ids))
 
