@@ -10,7 +10,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import click
-import polars as pl
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 
 logger = logging.getLogger("imdb-plex-sync")
 
@@ -62,23 +64,28 @@ def _fetch_imdb_watchlist(url: str) -> list[str]:
 
 
 def _imdb_to_plex_rating_keys(imdb_ids: list[str]) -> list[str]:
-    df1 = (
-        pl.LazyFrame({"imdb_id": imdb_ids})
-        .select(imdb_numeric_id=pl.col("imdb_id").str.replace("tt", "").cast(pl.Int64))
-        .with_row_index("imdb_row")
-    )
-    df2 = pl.scan_parquet("https://josh.github.io/plex-index/plex.parquet").select(
-        rating_key=pl.col("key").bin.encode("hex"),
-        imdb_numeric_id=pl.col("imdb_numeric_id"),
-    )
-    df3 = df1.join(df2, on="imdb_numeric_id", how="left").select(
-        "imdb_row", "rating_key"
-    )
-    df4 = df3.filter(pl.col("rating_key").is_not_null())
+    imdb_numeric_ids = [int(imdb_id.replace("tt", "", 1)) for imdb_id in imdb_ids]
+    value_set = pa.array(imdb_numeric_ids, type=pa.int64())
 
-    matches = df4.collect()
-    plex_rating_keys = matches["rating_key"].to_list()
-    mapped_ids = matches["imdb_row"].n_unique()
+    data = _urlopen("https://josh.github.io/plex-index/plex.parquet", timeout=30)
+    table = pq.read_table(pa.BufferReader(data), columns=["key", "imdb_numeric_id"])
+    table = table.filter(
+        pc.is_in(table["imdb_numeric_id"].cast(pa.int64()), value_set=value_set)
+    )
+
+    rating_keys: dict[int, list[str]] = {}
+    for key, imdb_numeric_id in zip(
+        table["key"].to_pylist(), table["imdb_numeric_id"].to_pylist(), strict=True
+    ):
+        if key is not None and imdb_numeric_id is not None:
+            rating_keys.setdefault(imdb_numeric_id, []).append(key.hex())
+
+    plex_rating_keys: list[str] = []
+    mapped_ids = 0
+    for imdb_numeric_id in imdb_numeric_ids:
+        if keys := rating_keys.get(imdb_numeric_id):
+            plex_rating_keys.extend(keys)
+            mapped_ids += 1
 
     if mapped_ids < len(imdb_ids):
         logger.warning("Found %i/%i IMDb IDs", mapped_ids, len(imdb_ids))
