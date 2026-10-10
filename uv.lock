@@ -39,7 +39,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "mypy", specifier = ">=1.4,<2" },
+    { name = "mypy", specifier = ">=1.5,<2" },
     { name = "pyarrow-stubs", specifier = ">=20,<21" },
     { name = "ruff", specifier = ">=0.6,<2" },
 ]

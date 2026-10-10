@@ -25,7 +25,7 @@ scripts.imdb-plex-sync = "imdb_plex_sync:main"
 
 [dependency-groups]
 dev = [
-    "mypy>=1.4,<2",
+    "mypy>=1.5,<2",
     "pyarrow-stubs>=20,<21",
     "ruff>=0.6,<2",
 ]
