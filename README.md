@@ -20,6 +20,7 @@ IMDB_WATCHLIST_URL=https://example.com/watchlist.csv PLEX_TOKEN=... imdb-plex-sy
 | `PLEX_DISCOVER_URL` | `-plex-discover-url` | Alternate Plex Discover base URL, such as an authenticating proxy. Defaults to `https://discover.provider.plex.tv`. |
 | `DRY_RUN` | `-dry-run`, `-n` | Show what would change without changing anything. |
 | | `-v` | Enable verbose logging. |
+| | `-version`, `-V` | Print the version. |
 
 ## See Also
 
