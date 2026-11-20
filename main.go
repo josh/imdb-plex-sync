@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	Version            = "0.0.0"
 	indexURL           = "https://josh.github.io/plex-index/plex.parquet"
 	defaultDiscoverURL = "https://discover.provider.plex.tv"
 	maxAttempts        = 4
@@ -334,8 +335,14 @@ func run(ctx context.Context, level *slog.LevelVar) error {
 	flag.BoolVar(&dryRun, "dry-run", dryRun, "show what would be done without making changes (env DRY_RUN)")
 	flag.BoolVar(&dryRun, "n", dryRun, "shorthand for -dry-run")
 	verbose := flag.Bool("v", false, "enable verbose logging")
+	showVersion := flag.Bool("version", false, "print version information")
+	flag.BoolVar(showVersion, "V", false, "shorthand for -version")
 	flag.Parse()
 
+	if *showVersion {
+		fmt.Println(Version)
+		return nil
+	}
 	if *verbose {
 		level.Set(slog.LevelDebug)
 	}
@@ -351,6 +358,7 @@ func run(ctx context.Context, level *slog.LevelVar) error {
 	}
 
 	slog.Info("starting sync",
+		"version", Version,
 		"imdb_watchlist", *watchlistURL,
 		"plex_discover_url", discoverURL,
 		"plex_token", plex.token != "",
