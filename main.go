@@ -31,6 +31,8 @@ const (
 	defaultDiscoverURL = "https://discover.provider.plex.tv"
 	maxAttempts        = 4
 	watchlistPageSize  = 50
+	metadataBatchSize  = 100
+	maxMatchLookups    = 100
 )
 
 var retryStatuses = map[int]bool{
@@ -123,7 +125,13 @@ func readSource(ctx context.Context, source string) ([]byte, error) {
 	return os.ReadFile(source)
 }
 
-func fetchIMDbWatchlist(ctx context.Context, source string) ([]string, error) {
+type imdbTitle struct {
+	ID    string
+	Title string
+	Show  bool
+}
+
+func fetchIMDbWatchlist(ctx context.Context, source string) ([]imdbTitle, error) {
 	start := time.Now()
 	data, err := readSource(ctx, source)
 	if err != nil {
@@ -136,16 +144,28 @@ func fetchIMDbWatchlist(ctx context.Context, source string) ([]string, error) {
 	if len(records) == 0 {
 		return nil, errors.New("IMDb watchlist is empty")
 	}
-	col := slices.Index(records[0], "Const")
-	if col < 0 {
+	idCol := slices.Index(records[0], "Const")
+	if idCol < 0 {
 		return nil, errors.New("IMDb watchlist has no Const column")
 	}
-	ids := make([]string, 0, len(records)-1)
+	titleCol := slices.Index(records[0], "Title")
+	typeCol := slices.Index(records[0], "Title Type")
+	titles := make([]imdbTitle, 0, len(records)-1)
 	for _, record := range records[1:] {
-		ids = append(ids, record[col])
+		t := imdbTitle{ID: record[idCol]}
+		if titleCol >= 0 {
+			t.Title = record[titleCol]
+		}
+		if typeCol >= 0 {
+			switch record[typeCol] {
+			case "TV Series", "TV Mini Series":
+				t.Show = true
+			}
+		}
+		titles = append(titles, t)
 	}
-	slog.Info("fetched IMDb watchlist", "titles", len(ids), "bytes", len(data), "duration", since(start))
-	return ids, nil
+	slog.Info("fetched IMDb watchlist", "titles", len(titles), "bytes", len(data), "duration", since(start))
+	return titles, nil
 }
 
 type indexRow struct {
@@ -153,7 +173,7 @@ type indexRow struct {
 	IMDbNumericID *uint32 `parquet:"imdb_numeric_id,optional"`
 }
 
-func plexRatingKeys(ctx context.Context, imdbIDs []string) (map[string]string, error) {
+func plexRatingKeys(ctx context.Context, imdbIDs []string) (map[string][]string, error) {
 	numericIDs := make([]uint32, 0, len(imdbIDs))
 	wanted := make(map[uint32][]string, len(imdbIDs))
 	for _, id := range imdbIDs {
@@ -205,7 +225,7 @@ func plexRatingKeys(ctx context.Context, imdbIDs []string) (map[string]string, e
 	}
 	slog.Info("scanned Plex index", "rows", scanned, "row_groups", len(file.RowGroups()), "duration", since(start))
 
-	ratingKeys := make(map[string]string)
+	ratingKeys := make(map[string][]string)
 	var unmapped []string
 	for i, id := range numericIDs {
 		keys := wanted[id]
@@ -214,12 +234,10 @@ func plexRatingKeys(ctx context.Context, imdbIDs []string) (map[string]string, e
 			continue
 		}
 		slog.Debug("mapped IMDb ID", "imdb_id", imdbIDs[i], "rating_keys", keys)
-		for _, key := range keys {
-			ratingKeys[key] = imdbIDs[i]
-		}
+		ratingKeys[imdbIDs[i]] = keys
 	}
 	mapped := len(imdbIDs) - len(unmapped)
-	slog.Info("mapped IMDb watchlist to Plex", "mapped", mapped, "total", len(imdbIDs), "rating_keys", len(ratingKeys))
+	slog.Info("mapped IMDb watchlist to Plex", "mapped", mapped, "total", len(imdbIDs))
 	if len(unmapped) > 0 {
 		slog.Warn("IMDb IDs missing from Plex index", "count", len(unmapped), "imdb_ids", unmapped)
 	}
@@ -236,6 +254,25 @@ type watchlistItem struct {
 	Title     string `json:"title"`
 	Year      int    `json:"year"`
 	Type      string `json:"type"`
+	PlexGUID  string `json:"guid"`
+	Guid      []struct {
+		ID string `json:"id"`
+	} `json:"Guid"`
+}
+
+func (item watchlistItem) imdbID() string {
+	for _, guid := range item.Guid {
+		if id, ok := strings.CutPrefix(guid.ID, "imdb://"); ok {
+			return id
+		}
+	}
+	return ""
+}
+
+type metadataResponse struct {
+	MediaContainer struct {
+		Metadata []watchlistItem `json:"Metadata"`
+	} `json:"MediaContainer"`
 }
 
 func (d discover) do(ctx context.Context, method, path string, query url.Values, header http.Header) ([]byte, error) {
@@ -265,15 +302,11 @@ func (d discover) watchlist(ctx context.Context) (map[string]watchlistItem, erro
 		header := http.Header{}
 		header.Set("X-Plex-Container-Start", strconv.Itoa(offset))
 		header.Set("X-Plex-Container-Size", strconv.Itoa(watchlistPageSize))
-		body, err := d.do(ctx, http.MethodGet, "/library/sections/watchlist/all", nil, header)
+		body, err := d.do(ctx, http.MethodGet, "/library/sections/watchlist/all", url.Values{"includeGuids": {"1"}}, header)
 		if err != nil {
 			return nil, err
 		}
-		var resp struct {
-			MediaContainer struct {
-				Metadata []watchlistItem `json:"Metadata"`
-			} `json:"MediaContainer"`
-		}
+		var resp metadataResponse
 		if err := json.Unmarshal(body, &resp); err != nil {
 			return nil, fmt.Errorf("parse Plex watchlist: %w", err)
 		}
@@ -282,7 +315,7 @@ func (d discover) watchlist(ctx context.Context) (map[string]watchlistItem, erro
 				slog.Debug("skipping Plex watchlist item without rating key", "title", item.Title, "year", item.Year)
 				continue
 			}
-			slog.Debug("Plex watchlist item", "rating_key", item.RatingKey, "title", item.Title, "year", item.Year, "type", item.Type)
+			slog.Debug("Plex watchlist item", "rating_key", item.RatingKey, "imdb_id", item.imdbID(), "title", item.Title, "year", item.Year, "type", item.Type)
 			items[item.RatingKey] = item
 		}
 		if len(resp.MediaContainer.Metadata) < watchlistPageSize {
@@ -290,6 +323,75 @@ func (d discover) watchlist(ctx context.Context) (map[string]watchlistItem, erro
 			return items, nil
 		}
 	}
+}
+
+func (d discover) metadata(ctx context.Context, keys []string) (map[string]watchlistItem, error) {
+	start := time.Now()
+	items := make(map[string]watchlistItem, len(keys))
+	for batch := range slices.Chunk(keys, metadataBatchSize) {
+		escaped := make([]string, 0, len(batch))
+		for _, key := range batch {
+			escaped = append(escaped, url.PathEscape(key))
+		}
+		header := http.Header{}
+		header.Set("X-Plex-Container-Start", "0")
+		header.Set("X-Plex-Container-Size", strconv.Itoa(metadataBatchSize))
+		body, err := d.do(ctx, http.MethodGet, "/library/metadata/"+strings.Join(escaped, ","), url.Values{"includeGuids": {"1"}}, header)
+		if err != nil {
+			return nil, err
+		}
+		var resp metadataResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return nil, fmt.Errorf("parse Plex metadata: %w", err)
+		}
+		for _, item := range resp.MediaContainer.Metadata {
+			items[item.RatingKey] = item
+		}
+	}
+	slog.Info("checked Plex index rating keys", "keys", len(keys), "found", len(items), "duration", since(start))
+	return items, nil
+}
+
+func (d discover) match(ctx context.Context, t imdbTitle) (watchlistItem, bool, error) {
+	plexType := "1"
+	if t.Show {
+		plexType = "2"
+	}
+	body, err := d.do(ctx, http.MethodGet, "/library/metadata/matches", url.Values{"type": {plexType}, "guid": {"imdb://" + t.ID}}, nil)
+	if err != nil {
+		return watchlistItem{}, false, err
+	}
+	var resp metadataResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return watchlistItem{}, false, fmt.Errorf("parse Plex match %s: %w", t.ID, err)
+	}
+	for _, item := range resp.MediaContainer.Metadata {
+		if item.RatingKey != "" && item.imdbID() == t.ID {
+			return item, true, nil
+		}
+	}
+	return watchlistItem{}, false, nil
+}
+
+func verifiedKey(t imdbTitle, candidates []string, found map[string]watchlistItem) string {
+	for _, key := range candidates {
+		item, ok := found[key]
+		switch {
+		case !ok:
+			slog.Warn("Plex index rating key not found in Plex Discover", "imdb_id", t.ID, "title", t.Title, "rating_key", key)
+		case item.imdbID() != t.ID:
+			slog.Warn("Plex index rating key belongs to another title",
+				"imdb_id", t.ID,
+				"title", t.Title,
+				"rating_key", key,
+				"plex_imdb_id", item.imdbID(),
+				"plex_title", item.Title,
+			)
+		default:
+			return key
+		}
+	}
+	return ""
 }
 
 func (d discover) action(ctx context.Context, action, key string) error {
@@ -365,11 +467,15 @@ func run(ctx context.Context, level *slog.LevelVar) error {
 		"dry_run", dryRun,
 	)
 
-	imdbIDs, err := fetchIMDbWatchlist(ctx, *watchlistURL)
+	titles, err := fetchIMDbWatchlist(ctx, *watchlistURL)
 	if err != nil {
 		return err
 	}
-	imdbKeys, err := plexRatingKeys(ctx, imdbIDs)
+	imdbIDs := make([]string, 0, len(titles))
+	for _, t := range titles {
+		imdbIDs = append(imdbIDs, t.ID)
+	}
+	candidates, err := plexRatingKeys(ctx, imdbIDs)
 	if err != nil {
 		return err
 	}
@@ -378,27 +484,100 @@ func run(ctx context.Context, level *slog.LevelVar) error {
 		return err
 	}
 
-	var toAdd, toRemove []string
-	for _, key := range slices.Sorted(maps.Keys(imdbKeys)) {
-		if _, ok := plexItems[key]; !ok {
-			toAdd = append(toAdd, key)
+	onPlex := make(map[string]bool)
+	for _, item := range plexItems {
+		if id := item.imdbID(); id != "" {
+			onPlex[id] = true
 		}
 	}
+
+	type addition struct {
+		key   string
+		title imdbTitle
+	}
+	wantedIDs := make(map[string]bool)
+	wantedKeys := make(map[string]bool)
+	var pending []imdbTitle
+	var pendingKeys []string
+	unchanged, failures := 0, 0
+	for _, t := range titles {
+		if wantedIDs[t.ID] {
+			continue
+		}
+		wantedIDs[t.ID] = true
+		for _, key := range candidates[t.ID] {
+			wantedKeys[key] = true
+		}
+		if onPlex[t.ID] || slices.ContainsFunc(candidates[t.ID], func(key string) bool { _, ok := plexItems[key]; return ok }) {
+			unchanged++
+			continue
+		}
+		pending = append(pending, t)
+		pendingKeys = append(pendingKeys, candidates[t.ID]...)
+	}
+
+	found, err := plex.metadata(ctx, pendingKeys)
+	if err != nil {
+		return err
+	}
+
+	var toAdd []addition
+	var unresolved, skipped []string
+	lookups := 0
+	for _, t := range pending {
+		key := verifiedKey(t, candidates[t.ID], found)
+		if key == "" {
+			if lookups == maxMatchLookups {
+				skipped = append(skipped, t.ID)
+				continue
+			}
+			lookups++
+			item, ok, err := plex.match(ctx, t)
+			if err != nil {
+				slog.Error("failed to look up IMDb title in Plex Discover", "imdb_id", t.ID, "title", t.Title, "err", err)
+				failures++
+				continue
+			}
+			if !ok {
+				unresolved = append(unresolved, t.ID)
+				continue
+			}
+			slog.Info("matched IMDb title in Plex Discover", "imdb_id", t.ID, "title", t.Title, "rating_key", item.RatingKey)
+			key = item.RatingKey
+		}
+		wantedKeys[key] = true
+		if _, ok := plexItems[key]; ok {
+			unchanged++
+			continue
+		}
+		toAdd = append(toAdd, addition{key: key, title: t})
+	}
+	if len(unresolved) > 0 {
+		slog.Warn("IMDb titles not found in Plex Discover", "count", len(unresolved), "imdb_ids", unresolved)
+	}
+	if len(skipped) > 0 {
+		slog.Warn("skipped Plex Discover lookups over the per-run limit", "limit", maxMatchLookups, "count", len(skipped), "imdb_ids", skipped)
+	}
+
+	var toRemove []string
 	for _, key := range slices.Sorted(maps.Keys(plexItems)) {
-		if _, ok := imdbKeys[key]; !ok {
+		if !wantedKeys[key] && !wantedIDs[plexItems[key].imdbID()] {
 			toRemove = append(toRemove, key)
 		}
 	}
 	slog.Info("planned watchlist changes",
 		"add", len(toAdd),
 		"remove", len(toRemove),
-		"unchanged", len(imdbKeys)-len(toAdd),
+		"unchanged", unchanged,
+		"unresolved", len(unresolved),
+		"skipped", len(skipped),
 		"dry_run", dryRun,
 	)
 
-	added, removed, failures := 0, 0, 0
-	for _, key := range toAdd {
-		attrs := []any{"rating_key", key, "imdb_id", imdbKeys[key]}
+	added, removed := 0, 0
+	for _, a := range toAdd {
+		key := a.key
+		attrs := []any{"rating_key", key, "imdb_id", a.title.ID, "title", a.title.Title}
 		if dryRun {
 			slog.Info("would add to Plex watchlist", attrs...)
 			continue

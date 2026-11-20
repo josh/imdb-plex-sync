@@ -17,8 +17,8 @@ func TestPlexIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	for id, want := range tests {
-		if got := keys[want]; got != id {
-			t.Errorf("rating key %s: got IMDb ID %q, want %q", want, got, id)
+		if !slices.Contains(keys[id], want) {
+			t.Errorf("%s: got rating keys %v, want %s", id, keys[id], want)
 		}
 	}
 }
