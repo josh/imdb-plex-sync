@@ -27,7 +27,6 @@ import (
 
 const (
 	Version            = "0.1.1"
-	indexURL           = "https://josh.github.io/plex-index/plex.parquet"
 	defaultDiscoverURL = "https://discover.provider.plex.tv"
 	maxAttempts        = 4
 	watchlistPageSize  = 50
@@ -112,14 +111,14 @@ func fetchOnce(req *http.Request, timeout time.Duration) ([]byte, int, error) {
 	return body, resp.StatusCode, nil
 }
 
-func readSource(ctx context.Context, source string) ([]byte, error) {
+func readSource(ctx context.Context, source string, timeout time.Duration) ([]byte, error) {
 	u, err := url.Parse(source)
 	if err == nil && (strings.EqualFold(u.Scheme, "http") || strings.EqualFold(u.Scheme, "https")) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
 		if err != nil {
 			return nil, err
 		}
-		return fetch(req, 10*time.Second)
+		return fetch(req, timeout)
 	}
 	slog.Debug("reading local file", "path", source)
 	return os.ReadFile(source)
@@ -133,7 +132,7 @@ type imdbTitle struct {
 
 func fetchIMDbWatchlist(ctx context.Context, source string) ([]imdbTitle, error) {
 	start := time.Now()
-	data, err := readSource(ctx, source)
+	data, err := readSource(ctx, source, 10*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +172,7 @@ type indexRow struct {
 	IMDbNumericID *uint32 `parquet:"imdb_numeric_id,optional"`
 }
 
-func plexRatingKeys(ctx context.Context, imdbIDs []string) (map[string][]string, error) {
+func plexRatingKeys(ctx context.Context, source string, imdbIDs []string) (map[string][]string, error) {
 	numericIDs := make([]uint32, 0, len(imdbIDs))
 	wanted := make(map[uint32][]string, len(imdbIDs))
 	for _, id := range imdbIDs {
@@ -186,11 +185,7 @@ func plexRatingKeys(ctx context.Context, imdbIDs []string) (map[string][]string,
 	}
 
 	start := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	data, err := fetch(req, 30*time.Second)
+	data, err := readSource(ctx, source, 30*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -433,6 +428,7 @@ func run(ctx context.Context, level *slog.LevelVar) error {
 	}
 
 	watchlistURL := flag.String("imdb-watchlist-url", os.Getenv("IMDB_WATCHLIST_URL"), "IMDb watchlist CSV URL or path (env IMDB_WATCHLIST_URL)")
+	indexSource := flag.String("plex-index-url", os.Getenv("PLEX_INDEX_URL"), "Plex index parquet URL or path (env PLEX_INDEX_URL)")
 	flag.StringVar(&discoverURL, "plex-discover-url", discoverURL, "Plex Discover base URL (env PLEX_DISCOVER_URL)")
 	flag.BoolVar(&dryRun, "dry-run", dryRun, "show what would be done without making changes (env DRY_RUN)")
 	flag.BoolVar(&dryRun, "n", dryRun, "shorthand for -dry-run")
@@ -454,6 +450,9 @@ func run(ctx context.Context, level *slog.LevelVar) error {
 	if *watchlistURL == "" {
 		return errors.New("IMDB_WATCHLIST_URL or -imdb-watchlist-url is required")
 	}
+	if *indexSource == "" {
+		return errors.New("PLEX_INDEX_URL or -plex-index-url is required")
+	}
 	plex := discover{baseURL: discoverURL, token: os.Getenv("PLEX_TOKEN")}
 	if plex.token == "" && discoverURL == defaultDiscoverURL {
 		return errors.New("PLEX_TOKEN is required unless PLEX_DISCOVER_URL points at an authenticating proxy")
@@ -462,6 +461,7 @@ func run(ctx context.Context, level *slog.LevelVar) error {
 	slog.Info("starting sync",
 		"version", Version,
 		"imdb_watchlist", *watchlistURL,
+		"plex_index", *indexSource,
 		"plex_discover_url", discoverURL,
 		"plex_token", plex.token != "",
 		"dry_run", dryRun,
@@ -475,7 +475,7 @@ func run(ctx context.Context, level *slog.LevelVar) error {
 	for _, t := range titles {
 		imdbIDs = append(imdbIDs, t.ID)
 	}
-	candidates, err := plexRatingKeys(ctx, imdbIDs)
+	candidates, err := plexRatingKeys(ctx, *indexSource, imdbIDs)
 	if err != nil {
 		return err
 	}
