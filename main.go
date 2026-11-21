@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	Version            = "0.1.1"
+	Version            = "0.1.2"
 	defaultDiscoverURL = "https://discover.provider.plex.tv"
 	maxAttempts        = 4
 	watchlistPageSize  = 50
