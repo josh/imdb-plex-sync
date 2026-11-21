@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	Version            = "0.1.0"
+	Version            = "0.1.1"
 	indexURL           = "https://josh.github.io/plex-index/plex.parquet"
 	defaultDiscoverURL = "https://discover.provider.plex.tv"
 	maxAttempts        = 4
